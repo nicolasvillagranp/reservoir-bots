@@ -1,5 +1,6 @@
 from transformers import pipeline
 from PIL import Image
+import numpy as np
 
 
 def get_model(model_name: str = "Intel/zoedepth-nyu-kitti") -> pipeline:
@@ -13,17 +14,22 @@ def get_model(model_name: str = "Intel/zoedepth-nyu-kitti") -> pipeline:
     return pipeline(task="depth-estimation", model=model_name)
 
 
-def estimate_depth(model: pipeline, image: Image.Image) -> list[float]:
+def estimate_depth(
+    model: pipeline, image: Image.Image
+) -> tuple[Image.Image, np.ndarray]:
     """
     Estimate the depth map for a given image using the provided model.
     Args:
         model: A Hugging Face pipeline for depth estimation.
         image: A PIL Image for which to estimate the depth map.
     Returns:
-        A 2D list representing the estimated depth map corresponding to the input image.
+        A tuple containing the estimated depth map as a PIL Image and as a numpy array.
     """
     outputs = model(image)
-    return outputs["depth"]
+    # Convert to numpy array
+    depth_array = np.array(outputs["depth"])
+
+    return outputs["depth"], depth_array
 
 
 if __name__ == "__main__":
@@ -34,5 +40,5 @@ if __name__ == "__main__":
     image_path = "data/images/train/coco2017_000000000632.jpg"
     image = Image.open(image_path)
     image = resize_image(image)
-    depth_map = estimate_depth(model, image)
+    depth_map, depth_array = estimate_depth(model, image)
     visualize_depth_map(image, depth_map)
