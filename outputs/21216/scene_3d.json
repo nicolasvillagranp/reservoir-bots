@@ -1,0 +1,124 @@
+{
+  "image_id": 21216,
+  "file_name": "coco2017_000000095862.jpg",
+  "image_size": {
+    "width": 500,
+    "height": 375
+  },
+  "depth_method": "bbox_proxy",
+  "objects": [
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.905,
+      "bbox_xyxy": [
+        2.1,
+        0.0,
+        500.0,
+        374.4
+      ],
+      "horizontal_bin": "CENTER",
+      "depth_bin": "CLOSE",
+      "depth_m": 1.01
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.784,
+      "bbox_xyxy": [
+        75.8,
+        141.6,
+        106.4,
+        226.8
+      ],
+      "horizontal_bin": "LEFT",
+      "depth_bin": "MID",
+      "depth_m": 6.5
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.714,
+      "bbox_xyxy": [
+        93.1,
+        272.5,
+        306.3,
+        375.0
+      ],
+      "horizontal_bin": "CENTER",
+      "depth_bin": "CLOSE",
+      "depth_m": 1.46
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.71,
+      "bbox_xyxy": [
+        355.4,
+        289.1,
+        446.9,
+        375.0
+      ],
+      "horizontal_bin": "RIGHT",
+      "depth_bin": "MID",
+      "depth_m": 2.82
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.624,
+      "bbox_xyxy": [
+        5.2,
+        263.9,
+        132.8,
+        374.9
+      ],
+      "horizontal_bin": "LEFT",
+      "depth_bin": "MID",
+      "depth_m": 2.12
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.623,
+      "bbox_xyxy": [
+        442.4,
+        283.4,
+        500.0,
+        375.0
+      ],
+      "horizontal_bin": "RIGHT",
+      "depth_bin": "MID",
+      "depth_m": 3.18
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.42,
+      "bbox_xyxy": [
+        268.4,
+        284.5,
+        371.8,
+        375.0
+      ],
+      "horizontal_bin": "CENTER",
+      "depth_bin": "MID",
+      "depth_m": 2.63
+    },
+    {
+      "tag": "HUMAN",
+      "class_id": 0,
+      "confidence": 0.262,
+      "bbox_xyxy": [
+        333.5,
+        294.8,
+        373.8,
+        359.0
+      ],
+      "horizontal_bin": "RIGHT",
+      "depth_bin": "MID",
+      "depth_m": 3.99
+    }
+  ],
+  "scene_graph": "HUMAN_1 is CENTER and CLOSE. HUMAN_2 is LEFT and MID. HUMAN_3 is CENTER and CLOSE. HUMAN_4 is RIGHT and MID. HUMAN_5 is LEFT and MID. HUMAN_6 is RIGHT and MID. HUMAN_7 is CENTER and MID. HUMAN_8 is RIGHT and MID. HUMAN_1 is NEAR HUMAN_3. HUMAN_3 is NEAR HUMAN_7. HUMAN_4 is NEAR HUMAN_6. HUMAN_4 is NEAR HUMAN_8. HUMAN_6 is NEAR HUMAN_8."
+}

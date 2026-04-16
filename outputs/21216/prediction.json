@@ -1,0 +1,24 @@
+{
+  "image_id": 21216,
+  "method": "gnn",
+  "action": "STOP",
+  "confidence": 1.0,
+  "reasoning": "HUMAN detected [MID] [TO THE RIGHT OF] [ROBOT]. HUMAN detected [MID] [TO THE RIGHT OF] [ROBOT]. HUMAN detected [MID] [TO THE RIGHT OF] [ROBOT].",
+  "reasoning_objects": [
+    {
+      "class": "HUMAN",
+      "h_bin": "RIGHT",
+      "d_bin": "MID"
+    },
+    {
+      "class": "HUMAN",
+      "h_bin": "RIGHT",
+      "d_bin": "MID"
+    },
+    {
+      "class": "HUMAN",
+      "h_bin": "RIGHT",
+      "d_bin": "MID"
+    }
+  ]
+}

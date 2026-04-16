@@ -5,6 +5,8 @@ models/*
 outputs/*
 !outputs/submission.json
 !outputs/images/
+!outputs/21216/
+scripts/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
