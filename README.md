@@ -18,7 +18,7 @@ Instead of a black-box decision, R3F builds a fully transparent reasoning pipeli
 
 The system simultaneously extracts bounding boxes and normalized relative depth to bypass monocular scale ambiguity.
 
-![outputs\21216\visualization.png](outputs\21216\visualization.png)
+<img src="outputs/21216/visualization.png" alt="Dual Perception" width="800">
 *(Left: Fine-tuned YOLOv11 detections. Right: Depth Anything V2 relative depth map)*
 
 ### 2\. The 3D Scene Reconstruction
