@@ -20,11 +20,9 @@ from tqdm import tqdm
 from src.config import (
     DATA_DIR,
     DETECTION_CATEGORIES,
-    FINETUNED_DIR,
     IMAGE_DIR,
     MACRO_CLASSES,
     OUTPUT_DIR,
-    PRETRAINED_DIR,
     FusionConfig,
     raw_name_to_macro_id,
 )

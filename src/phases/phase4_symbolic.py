@@ -27,10 +27,10 @@ from src.config import (
     raw_name_to_macro_id,
 )
 
-
 # ---------------------------------------------------------------------------
 # Spatial binning helpers
 # ---------------------------------------------------------------------------
+
 
 def _bin_horizontal(bbox_xywh: list[float], img_w: int) -> str:
     """Bin object horizontal center into LEFT / CENTER / RIGHT."""
@@ -56,6 +56,7 @@ def _bin_depth(depth_m: float, cfg: SymbolicConfig) -> str:
 # ---------------------------------------------------------------------------
 # Graph builder
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SceneNode:
@@ -84,17 +85,22 @@ def build_scene_graph(
         label = f"{macro}_{class_counters[macro]}"
         h_bin = _bin_horizontal(obj["bbox"], img_w)
         d_bin = _bin_depth(obj["depth_m"], cfg)
-        nodes.append(SceneNode(
-            label=label, macro_class=macro,
-            h_bin=h_bin, d_bin=d_bin, depth_m=obj["depth_m"],
-        ))
+        nodes.append(
+            SceneNode(
+                label=label,
+                macro_class=macro,
+                h_bin=h_bin,
+                d_bin=d_bin,
+                depth_m=obj["depth_m"],
+            )
+        )
 
     lines: list[str] = []
     for node in nodes:
         lines.append(f"{node.label} is {node.h_bin} and {node.d_bin}.")
 
     for i, a in enumerate(nodes):
-        for b in nodes[i + 1:]:
+        for b in nodes[i + 1 :]:
             if abs(a.depth_m - b.depth_m) < cfg.nearness_threshold and a.h_bin == b.h_bin:
                 lines.append(f"{a.label} is NEAR {b.label}.")
 
@@ -162,6 +168,7 @@ def query_claude(scene_text: str, cfg: SymbolicConfig | None = None) -> dict:
 # Rule-based labeling fallback (no API key needed)
 # ---------------------------------------------------------------------------
 
+
 def rule_based_label(fused_objects: list[dict], img_w: int = 640) -> dict:
     """Generate action + reasoning_edges via deterministic rules."""
     cfg = SymbolicConfig()
@@ -196,41 +203,48 @@ def rule_based_label(fused_objects: list[dict], img_w: int = 640) -> dict:
 # Synthetic dataset generation
 # ---------------------------------------------------------------------------
 
+
 def generate_gnn_dataset(
+    split: str = "train",
     n_images: int | None = None,
     use_claude: bool = False,
 ) -> Path:
-    """Run fusion on val images and label with Claude or rules.
+    """Run fusion on images from *split* and save labeled scenes.
 
-    Saves labeled scenes to data/gnn_dataset/scenes.jsonl.
+    Args:
+        split: "train" or "val".
+        n_images: Cap number of images (for test mode).
+        use_claude: Use Claude API for labeling (else rule-based).
+
+    Returns:
+        Path to output JSONL file.
     """
     from src.phases.phase3_fusion import fuse_scene
 
     out_dir = DATA_DIR / "gnn_dataset"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "scenes.jsonl"
+    out_path = out_dir / f"scenes_{split}.jsonl"
 
-    # Load val annotations for image metadata
-    with open(DATA_DIR / "annotations" / "val.json") as f:
-        val_data = json.load(f)
+    with open(DATA_DIR / "annotations" / f"{split}.json") as f:
+        ann_data = json.load(f)
 
-    images = val_data["images"]
+    images = ann_data["images"]
     if n_images:
         random.seed(42)
         random.shuffle(images)
         images = images[:n_images]
 
-    # Always use base YOLO for dataset generation — fuse_scene remaps to macro-classes.
-    # Fine-tuned model may be too weak (e.g. 2-epoch smoke test) to detect anything.
+    # Always use base YOLO — fuse_scene remaps to macro-classes.
+    # Fine-tuned model may be too weak (e.g. 2-epoch smoke test).
     model_path = YOLOConfig().model_weights
 
     scenes: list[dict] = []
     for i, img_meta in enumerate(images):
-        img_path = IMAGE_DIR / "val" / img_meta["file_name"]
+        img_path = IMAGE_DIR / split / img_meta["file_name"]
         if not img_path.exists():
             continue
 
-        print(f"[{i+1}/{len(images)}] {img_meta['file_name']}...")
+        print(f"  [{split}][{i + 1}/{len(images)}] {img_meta['file_name']}...")
         fused = fuse_scene(img_path, model_path)
         if not fused:
             continue
@@ -247,13 +261,15 @@ def generate_gnn_dataset(
         else:
             label = rule_based_label(fused, img_w)
 
-        scenes.append({
-            "image": img_meta["file_name"],
-            "objects": fused,
-            "scene_text": scene_text,
-            "action": label["action"],
-            "reasoning_edges": label["reasoning_edges"],
-        })
+        scenes.append(
+            {
+                "image": img_meta["file_name"],
+                "objects": fused,
+                "scene_text": scene_text,
+                "action": label["action"],
+                "reasoning_edges": label["reasoning_edges"],
+            }
+        )
 
     with open(out_path, "w") as f:
         for scene in scenes:
@@ -264,11 +280,12 @@ def generate_gnn_dataset(
 
 
 def main() -> None:
-    """Generate synthetic GNN training dataset."""
+    """Generate synthetic GNN training dataset for both splits."""
     n = 20 if MODE == "test" else None
     use_claude = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    print(f"=== Phase 4: Generating GNN dataset (n={n or 'all'}, claude={use_claude}) ===")
-    generate_gnn_dataset(n_images=n, use_claude=use_claude)
+    print(f"=== Phase 4: Generating GNN dataset (n={n or 'all'}/split, claude={use_claude}) ===")
+    for split in ("train", "val"):
+        generate_gnn_dataset(split=split, n_images=n, use_claude=use_claude)
     print("=== Phase 4 complete ===")
 
 

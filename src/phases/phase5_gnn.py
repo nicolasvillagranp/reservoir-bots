@@ -177,12 +177,12 @@ def train_step(
 
 
 # ---------------------------------------------------------------------------
-# Training loop
+# Dataset loading
 # ---------------------------------------------------------------------------
 
-def load_dataset() -> list[Data]:
-    """Load scenes.jsonl and convert to PyG graphs."""
-    scenes_path = DATA_DIR / "gnn_dataset" / "scenes.jsonl"
+def load_split(split: str) -> list[Data]:
+    """Load scenes_{split}.jsonl and convert to PyG graphs."""
+    scenes_path = DATA_DIR / "gnn_dataset" / f"scenes_{split}.jsonl"
     if not scenes_path.exists():
         raise FileNotFoundError(f"{scenes_path} not found — run Phase 4 first")
 
@@ -195,38 +195,103 @@ def load_dataset() -> list[Data]:
             )
             graphs.append(g)
 
-    print(f"Loaded {len(graphs)} graphs from {scenes_path}")
+    print(f"  [{split}] {len(graphs)} graphs from {scenes_path}")
     return graphs
 
 
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+
+def evaluate(model: NavigationGNN, loader: DataLoader) -> dict[str, float]:
+    """Evaluate model on a DataLoader. Returns accuracy metrics."""
+    model.eval()
+    correct = 0
+    total = 0
+    per_class_correct: dict[int, int] = {0: 0, 1: 0, 2: 0}
+    per_class_total: dict[int, int] = {0: 0, 1: 0, 2: 0}
+
+    with torch.no_grad():
+        for batch in loader:
+            action_logits, _ = model(batch)
+            preds = action_logits.argmax(dim=1)
+            targets = batch.y
+
+            correct += (preds == targets).sum().item()
+            total += targets.size(0)
+
+            for cls_idx in range(3):
+                mask = targets == cls_idx
+                per_class_total[cls_idx] += mask.sum().item()
+                per_class_correct[cls_idx] += (preds[mask] == cls_idx).sum().item()
+
+    acc = correct / total if total else 0.0
+    per_class_acc: dict[str, float] = {}
+    for idx, name in IDX_TO_ACTION.items():
+        t = per_class_total[idx]
+        per_class_acc[name] = per_class_correct[idx] / t if t else 0.0
+
+    return {"accuracy": acc, "total": total, **per_class_acc}
+
+
+# ---------------------------------------------------------------------------
+# Training loop
+# ---------------------------------------------------------------------------
+
 def train_gnn(cfg: GNNConfig | None = None) -> Path:
-    """Train GNN on synthetic dataset and save weights."""
+    """Train GNN on train split, evaluate on val split."""
     cfg = cfg or GNNConfig()
     GNN_DIR.mkdir(parents=True, exist_ok=True)
 
-    graphs = load_dataset()
-    if not graphs:
-        raise ValueError("No graphs to train on")
+    train_graphs = load_split("train")
+    val_graphs = load_split("val")
+    if not train_graphs:
+        raise ValueError("No training graphs — run Phase 4 first")
 
-    loader = DataLoader(graphs, batch_size=cfg.batch_size, shuffle=True)
+    train_loader = DataLoader(train_graphs, batch_size=cfg.batch_size, shuffle=True)
+    val_loader = DataLoader(val_graphs, batch_size=cfg.batch_size) if val_graphs else None
+
     model = NavigationGNN(hidden=cfg.hidden)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
 
+    log_every = max(1, cfg.epochs // 10)
     for epoch in range(cfg.epochs):
+        model.train()
         epoch_loss = 0.0
-        for batch in loader:
+        for batch in train_loader:
             metrics = train_step(model, batch, optimizer)
             epoch_loss += metrics["total_loss"]
 
-        if (epoch + 1) % max(1, cfg.epochs // 10) == 0:
-            print(
-                f"  Epoch {epoch+1:4d}/{cfg.epochs} | "
-                f"loss={epoch_loss / len(loader):.4f}"
-            )
+        if (epoch + 1) % log_every == 0:
+            avg_loss = epoch_loss / len(train_loader)
+            line = f"  Epoch {epoch+1:4d}/{cfg.epochs} | train_loss={avg_loss:.4f}"
+            if val_loader:
+                val_metrics = evaluate(model, val_loader)
+                line += f" | val_acc={val_metrics['accuracy']:.1%}"
+            print(line)
+
+    # Final metrics
+    print("\n  --- Final metrics ---")
+    train_metrics = evaluate(model, train_loader)
+    print(f"  Train: acc={train_metrics['accuracy']:.1%} "
+          f"(n={train_metrics['total']}) "
+          f"STOP={train_metrics['STOP']:.0%} "
+          f"SLOW={train_metrics['SLOW']:.0%} "
+          f"CONTINUE={train_metrics['CONTINUE']:.0%}")
+
+    if val_loader:
+        val_metrics = evaluate(model, val_loader)
+        print(f"  Val:   acc={val_metrics['accuracy']:.1%} "
+              f"(n={val_metrics['total']}) "
+              f"STOP={val_metrics['STOP']:.0%} "
+              f"SLOW={val_metrics['SLOW']:.0%} "
+              f"CONTINUE={val_metrics['CONTINUE']:.0%}")
+    else:
+        print("  Val:   no val data")
 
     save_path = Path(cfg.save_path)
     torch.save(model.state_dict(), save_path)
-    print(f"GNN saved to {save_path}")
+    print(f"\n  GNN saved to {save_path}")
     return save_path
 
 
