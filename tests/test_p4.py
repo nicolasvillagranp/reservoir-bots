@@ -10,14 +10,10 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from config import OUTPUT_DIR
-from phase4_symbolic import build_scene_graph, query_claude
+from src.config import OUTPUT_DIR
+from src.phases.phase4_symbolic import build_scene_graph, query_claude
 
 PHASE4_OUT = OUTPUT_DIR / "phase4"
 PHASE4_OUT.mkdir(parents=True, exist_ok=True)

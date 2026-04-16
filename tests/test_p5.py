@@ -8,17 +8,12 @@
 from __future__ import annotations
 
 import random
-import sys
-from pathlib import Path
 
 import torch
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from phase5_gnn import (
+from src.phases.phase5_gnn import (
     ACTION_TO_IDX,
     NODE_FEAT_DIM,
     NavigationGNN,

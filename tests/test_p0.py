@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-# Allow imports from src/
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from config import IMAGE_DIR, LABEL_DIR, MACRO_CLASSES, OUTPUT_DIR
+from src.config import IMAGE_DIR, LABEL_DIR, MACRO_CLASSES, OUTPUT_DIR
 
 # Colors per macro-class (BGR)
 CLASS_COLORS: dict[int, tuple[int, int, int]] = {

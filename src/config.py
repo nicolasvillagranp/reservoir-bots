@@ -49,6 +49,11 @@ MACRO_CLASS_TO_ID: dict[str, int] = {v: k for k, v in MACRO_CLASSES.items()}
 # re-numbering across annotation files.
 # ---------------------------------------------------------------------------
 RAW_TO_MACRO: dict[str, str] = {
+    # ── Macro-class self-mapping (fine-tuned model outputs these) ──
+    "human": "HUMAN",
+    "vehicle": "VEHICLE",
+    "obstacle": "OBSTACLE",
+    "context": "CONTEXT",
     # ── HUMAN (0) ──────────────────────────────────────────────
     "person": "HUMAN",
     "head": "HUMAN",

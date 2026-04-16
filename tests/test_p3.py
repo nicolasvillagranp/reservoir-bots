@@ -8,17 +8,13 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from config import IMAGE_DIR, OUTPUT_DIR, PRETRAINED_DIR
-from phase3_fusion import fuse_scene
+from src.config import IMAGE_DIR, OUTPUT_DIR, PRETRAINED_DIR
+from src.phases.phase3_fusion import fuse_scene
 
 PHASE3_OUT = OUTPUT_DIR / "phase3"
 PHASE3_OUT.mkdir(parents=True, exist_ok=True)

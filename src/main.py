@@ -1,25 +1,23 @@
-"""Phase 6: End-to-end pipeline — loops through test images, runs full
-YOLO -> Depth -> Fusion -> GNN inference, and generates submission.json.
+"""Phase 6: End-to-end pipeline — runs YOLO → Depth → Fusion → GNN on test
+images and generates submission.json.
 
 Usage:
-    uv run python scripts/run_pipeline.py --model models/finetuned/theker/weights/best.pt
-    uv run python scripts/run_pipeline.py --model models/pretrained/yolo11n.pt --limit 10
+    uv run python -m src.main --model models/finetuned/yolo/weights/best.pt
+    uv run python -m src.main --model models/pretrained/yolo11n.pt --limit 10
 """
 
 from __future__ import annotations
 
 import argparse
+import gc
 import json
-import sys
 from pathlib import Path
 
 import torch
+from torch_geometric.data import Data
 from tqdm import tqdm
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from config import (
+from src.config import (
     DATA_DIR,
     DETECTION_CATEGORIES,
     FINETUNED_DIR,
@@ -30,11 +28,11 @@ from config import (
     FusionConfig,
     raw_name_to_macro_id,
 )
-from phase1_vision import predict_objects
-from phase2_depth import estimate_depth
-from phase3_fusion import _center_crop_depth
-from phase4_symbolic import _bin_depth, _bin_horizontal, SymbolicConfig
-from phase5_gnn import (
+from src.phases.phase1_vision import predict_objects
+from src.phases.phase2_depth import estimate_depth
+from src.phases.phase3_fusion import _center_crop_depth
+from src.phases.phase4_symbolic import SymbolicConfig, _bin_depth, _bin_horizontal
+from src.phases.phase5_gnn import (
     ACTION_TO_IDX,
     IDX_TO_ACTION,
     NavigationGNN,
@@ -45,7 +43,11 @@ from phase5_gnn import (
 # Reasoning formatter
 # ---------------------------------------------------------------------------
 
-POSITION_LABELS = {"LEFT": "TO THE LEFT OF", "CENTER": "IN FRONT OF", "RIGHT": "TO THE RIGHT OF"}
+POSITION_LABELS = {
+    "LEFT": "TO THE LEFT OF",
+    "CENTER": "IN FRONT OF",
+    "RIGHT": "TO THE RIGHT OF",
+}
 
 
 def format_reasoning(active_edges: list[dict]) -> str:
@@ -75,7 +77,10 @@ def format_reasoning(active_edges: list[dict]) -> str:
 # Rule-based fallback (used when GNN not trained yet)
 # ---------------------------------------------------------------------------
 
-def rule_based_action(fused_objects: list[dict], img_w: int = 640) -> tuple[str, float, list[dict]]:
+
+def rule_based_action(
+    fused_objects: list[dict], img_w: int = 640,
+) -> tuple[str, float, list[dict]]:
     """Deterministic rule-based action when GNN is unavailable.
 
     Returns:
@@ -93,7 +98,6 @@ def rule_based_action(fused_objects: list[dict], img_w: int = 640) -> tuple[str,
 
         info = {"class": macro, "h_bin": h_bin, "d_bin": d_bin, "depth_m": obj["depth_m"]}
 
-        # STOP rules
         if macro == "HUMAN" and d_bin == "CLOSE":
             action = "STOP"
             confidence = 0.95
@@ -102,8 +106,6 @@ def rule_based_action(fused_objects: list[dict], img_w: int = 640) -> tuple[str,
             action = "STOP"
             confidence = 0.90
             reasoning.append(info)
-
-        # SLOW rules (only upgrade if not already STOP)
         elif action != "STOP":
             if macro == "HUMAN" and d_bin == "MID":
                 action = "SLOW"
@@ -121,6 +123,7 @@ def rule_based_action(fused_objects: list[dict], img_w: int = 640) -> tuple[str,
 # GNN inference path
 # ---------------------------------------------------------------------------
 
+
 def gnn_predict(
     fused_objects: list[dict],
     model: NavigationGNN,
@@ -133,7 +136,6 @@ def gnn_predict(
     """
     sym_cfg = SymbolicConfig()
 
-    # Build node features
     node_info: list[dict] = []
     feats: list[list[float]] = []
     for obj in fused_objects:
@@ -146,16 +148,17 @@ def gnn_predict(
     x = torch.tensor(feats, dtype=torch.float)
     n = len(feats)
 
-    # Fully connected edges
     src, dst = [], []
     for i in range(n):
         for j in range(n):
             if i != j:
                 src.append(i)
                 dst.append(j)
-    edge_index = torch.tensor([src, dst], dtype=torch.long) if src else torch.zeros(2, 0, dtype=torch.long)
+    edge_index = (
+        torch.tensor([src, dst], dtype=torch.long)
+        if src else torch.zeros(2, 0, dtype=torch.long)
+    )
 
-    from torch_geometric.data import Data
     data = Data(x=x, edge_index=edge_index, batch=torch.zeros(n, dtype=torch.long))
 
     model.eval()
@@ -167,7 +170,6 @@ def gnn_predict(
     action = IDX_TO_ACTION[action_idx]
     confidence = float(probs[action_idx])
 
-    # Find top reasoning edges (highest edge logit scores)
     reasoning: list[dict] = []
     if edge_logits.numel() > 0:
         edge_probs = torch.sigmoid(edge_logits)
@@ -183,6 +185,7 @@ def gnn_predict(
 # ---------------------------------------------------------------------------
 # Main pipeline
 # ---------------------------------------------------------------------------
+
 
 def load_test_images() -> list[dict]:
     """Load test image metadata from test.json."""
@@ -213,7 +216,6 @@ def run_pipeline(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fusion_cfg = FusionConfig()
 
-    # Load GNN if available
     gnn_model = None
     if gnn_model_path and Path(gnn_model_path).exists():
         gnn_model = NavigationGNN()
@@ -247,8 +249,6 @@ def run_pipeline(
             conf_thresh=0.25, min_area_frac=fusion_cfg.min_bbox_area_frac,
         )
 
-        # Remap: if model outputs COCO class names, map to macro-class IDs.
-        # Fine-tuned model already outputs 0-3; base COCO model outputs 0-79.
         mapped_dets: list[dict] = []
         for det in raw_dets:
             macro_id = raw_name_to_macro_id(det["class_name"])
@@ -259,7 +259,6 @@ def run_pipeline(
         raw_dets = mapped_dets
 
         if not raw_dets:
-            # No detections — CONTINUE with high confidence
             predictions_list.append({
                 "image_id": image_id,
                 "action": "CONTINUE",
@@ -268,12 +267,11 @@ def run_pipeline(
             })
             continue
 
-        # Phase 2: Depth (load once per image)
-        import gc
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+        # Phase 2: Depth
         depth_map = estimate_depth(img_path)
 
         # Phase 3: Fuse
@@ -292,7 +290,6 @@ def run_pipeline(
                 "confidence": round(det["confidence"], 3),
             })
 
-            # Add to submission detections
             detections_list.append({
                 "id": det_id,
                 "image_id": image_id,
@@ -317,7 +314,6 @@ def run_pipeline(
             "reasoning": reasoning_str,
         })
 
-    # Build submission
     submission = {
         "team_name": "theker_robotics",
         "detection_categories": DETECTION_CATEGORIES,
@@ -336,6 +332,7 @@ def run_pipeline(
 
 
 def main() -> None:
+    """Run end-to-end pipeline with CLI args."""
     parser = argparse.ArgumentParser(description="Run end-to-end pipeline")
     parser.add_argument("--model", type=str, required=True, help="Path to YOLO .pt weights")
     parser.add_argument("--gnn", type=str, default=None, help="Path to GNN .pt weights")

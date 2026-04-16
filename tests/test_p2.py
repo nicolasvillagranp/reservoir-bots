@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import random
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -21,11 +20,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from config import DATA_DIR, IMAGE_DIR, MACRO_CLASSES, OUTPUT_DIR, raw_name_to_macro_id
-from phase2_depth import estimate_depth
+from src.config import DATA_DIR, IMAGE_DIR, MACRO_CLASSES, OUTPUT_DIR, raw_name_to_macro_id
+from src.phases.phase2_depth import estimate_depth
 
 
 def pick_images_per_class(n_per_class: int = 1) -> dict[int, Path]:

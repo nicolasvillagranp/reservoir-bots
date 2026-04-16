@@ -9,16 +9,10 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-sys.path.insert(0, str(SRC_DIR))
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from config import DETECTION_CATEGORIES, OUTPUT_DIR, PRETRAINED_DIR
-from run_pipeline import run_pipeline
+from src.config import DETECTION_CATEGORIES, OUTPUT_DIR, PRETRAINED_DIR
+from src.main import run_pipeline
 
 PHASE6_OUT = OUTPUT_DIR / "phase6"
 PHASE6_OUT.mkdir(parents=True, exist_ok=True)

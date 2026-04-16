@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import random
 import shutil
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -22,10 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC_DIR))
-
-from config import (
+from src.config import (
     DATA_DIR,
     FINETUNED_DIR,
     IMAGE_DIR,
@@ -36,7 +32,7 @@ from config import (
     YOLOConfig,
     raw_name_to_macro_id,
 )
-from phase1_vision import predict_objects, train
+from src.phases.phase1_vision import predict_objects, train
 
 PHASE1_OUT = OUTPUT_DIR / "phase1"
 PHASE1_OUT.mkdir(parents=True, exist_ok=True)
