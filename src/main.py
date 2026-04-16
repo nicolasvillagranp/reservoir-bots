@@ -16,6 +16,7 @@ from pathlib import Path
 import torch
 from torch_geometric.data import Data
 from tqdm import tqdm
+from ultralytics import YOLO
 
 from src.config import (
     DATA_DIR,
@@ -26,10 +27,13 @@ from src.config import (
     FusionConfig,
     raw_name_to_macro_id,
 )
-from src.phases.phase1_vision import predict_objects
-from src.phases.phase2_depth import estimate_depth
-from src.phases.phase3_fusion import _center_crop_depth
-from src.phases.phase4_symbolic import SymbolicConfig, _bin_depth, _bin_horizontal
+from src.phases.phase1_vision import predict_objects_with_model
+from src.phases.phase4_symbolic import (
+    SymbolicConfig,
+    _approx_depth_from_bbox,
+    _bin_depth,
+    _bin_horizontal,
+)
 from src.phases.phase5_gnn import (
     ACTION_TO_IDX,
     IDX_TO_ACTION,
@@ -214,6 +218,9 @@ def run_pipeline(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fusion_cfg = FusionConfig()
 
+    yolo_model = YOLO(str(yolo_model_path))
+    print(f"YOLO loaded from {yolo_model_path}")
+
     gnn_model = None
     if gnn_model_path and Path(gnn_model_path).exists():
         gnn_model = NavigationGNN()
@@ -231,96 +238,114 @@ def run_pipeline(
     predictions_list: list[dict] = []
     det_id = 1
 
-    for img_meta in tqdm(test_images, desc="Processing test images"):
-        image_id = img_meta["id"]
-        fname = img_meta["file_name"]
-        img_w = img_meta["width"]
-        img_path = IMAGE_DIR / "test" / fname
+    interrupted = False
+    try:
+        for img_meta in tqdm(test_images, desc="Processing test images"):
+            image_id = img_meta["id"]
+            fname = img_meta["file_name"]
+            img_w = int(img_meta.get("width", 640))
+            img_h = int(img_meta.get("height", 640))
+            img_path = IMAGE_DIR / "test" / fname
 
-        if not img_path.exists():
-            print(f"WARN: {img_path} not found, skipping")
-            continue
+            if not img_path.exists():
+                print(f"WARN: {img_path} not found, skipping")
+                continue
 
-        # Phase 1: YOLO detection + remap to macro-classes
-        raw_dets = predict_objects(
-            img_path, yolo_model_path,
-            conf_thresh=0.25, min_area_frac=fusion_cfg.min_bbox_area_frac,
-        )
+            # Phase 1: YOLO detection + remap to macro-classes
+            try:
+                raw_dets = predict_objects_with_model(
+                    img_path,
+                    yolo_model,
+                    conf_thresh=0.25,
+                    min_area_frac=fusion_cfg.min_bbox_area_frac,
+                )
+            except (OSError, ValueError) as e:
+                msg = str(e).replace("\n", " ").strip()
+                print(f"WARN: YOLO failed on {fname}: {msg}. Skipping image.")
+                continue
 
-        mapped_dets: list[dict] = []
-        for det in raw_dets:
-            macro_id = raw_name_to_macro_id(det["class_name"])
-            if macro_id is not None:
-                det["class_id"] = macro_id
-                det["class_name"] = MACRO_CLASSES[macro_id]
-                mapped_dets.append(det)
-        raw_dets = mapped_dets
+            mapped_dets: list[dict] = []
+            for det in raw_dets:
+                macro_id = raw_name_to_macro_id(det["class_name"])
+                if macro_id is not None:
+                    det["class_id"] = macro_id
+                    det["class_name"] = MACRO_CLASSES[macro_id]
+                    mapped_dets.append(det)
+            raw_dets = mapped_dets
 
-        if not raw_dets:
+            if not raw_dets:
+                predictions_list.append({
+                    "image_id": image_id,
+                    "action": "CONTINUE",
+                    "confidence": 0.95,
+                    "reasoning": "No objects detected in scene. Path is clear.",
+                })
+                continue
+
+            # Phase 2: Fast depth approximation from bbox geometry
+            # Phase 3: Fuse
+            fused: list[dict] = []
+            for det in raw_dets:
+                depth_m = _approx_depth_from_bbox(det["bbox_xyxy"], img_w, img_h)
+                x1, y1, x2, y2 = det["bbox_xyxy"]
+                fused.append({
+                    "class": det["class_name"],
+                    "class_id": det["class_id"],
+                    "bbox": [x1, y1, x2 - x1, y2 - y1],
+                    "bbox_xyxy": det["bbox_xyxy"],
+                    "depth_m": depth_m,
+                    "confidence": round(det["confidence"], 3),
+                })
+
+                detections_list.append({
+                    "id": det_id,
+                    "image_id": image_id,
+                    "category_id": det["class_id"],
+                    "bbox": [
+                        round(x1, 1),
+                        round(y1, 1),
+                        round(x2 - x1, 1),
+                        round(y2 - y1, 1),
+                    ],
+                    "score": round(det["confidence"], 3),
+                })
+                det_id += 1
+
+            # Phase 4/5: Action prediction
+            if gnn_model:
+                action, conf, reasoning_objs = gnn_predict(fused, gnn_model, img_w)
+            else:
+                action, conf, reasoning_objs = rule_based_action(fused, img_w)
+
+            reasoning_str = format_reasoning(reasoning_objs)
+
             predictions_list.append({
                 "image_id": image_id,
-                "action": "CONTINUE",
-                "confidence": 0.95,
-                "reasoning": "No objects detected in scene. Path is clear.",
+                "action": action,
+                "confidence": round(conf, 3),
+                "reasoning": reasoning_str,
             })
-            continue
+    except KeyboardInterrupt:
+        interrupted = True
+        print("\nWARN: Run interrupted. Writing partial submission to output path.")
 
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-        # Phase 2: Depth
-        depth_map = estimate_depth(img_path)
-
-        # Phase 3: Fuse
-        fused: list[dict] = []
-        for det in raw_dets:
-            depth_m = _center_crop_depth(
-                depth_map, det["bbox_xyxy"], fusion_cfg.center_crop_fraction,
-            )
-            x1, y1, x2, y2 = det["bbox_xyxy"]
-            fused.append({
-                "class": det["class_name"],
-                "class_id": det["class_id"],
-                "bbox": [x1, y1, x2 - x1, y2 - y1],
-                "bbox_xyxy": det["bbox_xyxy"],
-                "depth_m": round(depth_m, 2),
-                "confidence": round(det["confidence"], 3),
-            })
-
-            detections_list.append({
-                "id": det_id,
-                "image_id": image_id,
-                "category_id": det["class_id"],
-                "bbox": [round(x1, 1), round(y1, 1), round(x2 - x1, 1), round(y2 - y1, 1)],
-                "score": round(det["confidence"], 3),
-            })
-            det_id += 1
-
-        # Phase 4/5: Action prediction
-        if gnn_model:
-            action, conf, reasoning_objs = gnn_predict(fused, gnn_model, img_w)
-        else:
-            action, conf, reasoning_objs = rule_based_action(fused, img_w)
-
-        reasoning_str = format_reasoning(reasoning_objs)
-
-        predictions_list.append({
-            "image_id": image_id,
-            "action": action,
-            "confidence": round(conf, 3),
-            "reasoning": reasoning_str,
-        })
+    del yolo_model
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     submission = {
         "team_name": "theker_robotics",
-        "detection_categories": DETECTION_CATEGORIES,
         "detections": detections_list,
         "predictions": predictions_list,
+        "detection_categories": DETECTION_CATEGORIES,
     }
 
     with open(output_path, "w") as f:
         json.dump(submission, f, indent=2)
+
+    if interrupted:
+        print("Submission is partial because processing was interrupted.")
 
     print(f"\nSubmission saved: {output_path}")
     print(f"  Images processed: {len(predictions_list)}")

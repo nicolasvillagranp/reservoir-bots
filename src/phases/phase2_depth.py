@@ -16,25 +16,14 @@ from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 from src.config import IMAGE_DIR, PRETRAINED_DIR, DepthConfig
 
 
-def estimate_depth(
-    img_path: str | Path,
+def load_depth_components(
     cfg: DepthConfig | None = None,
-) -> np.ndarray:
-    """Estimate metric depth for a single image.
-
-    Loads model to GPU, infers, moves to CPU, clears VRAM.
-
-    Returns:
-        depth_map: np.ndarray of shape (H, W) with metric depth in meters.
-    """
+) -> tuple[AutoImageProcessor, AutoModelForDepthEstimation, torch.device]:
+    """Load ZoeDepth processor/model once for repeated inference."""
     cfg = cfg or DepthConfig()
     device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
 
-    image = Image.open(img_path).convert("RGB")
-    orig_w, orig_h = image.size
-
     PRETRAINED_DIR.mkdir(parents=True, exist_ok=True)
-
     processor = AutoImageProcessor.from_pretrained(
         cfg.model_name, cache_dir=str(PRETRAINED_DIR)
     )
@@ -43,6 +32,18 @@ def estimate_depth(
     )
     model.to(device)
     model.eval()
+    return processor, model, device
+
+
+def estimate_depth_with_components(
+    img_path: str | Path,
+    processor: AutoImageProcessor,
+    model: AutoModelForDepthEstimation,
+    device: torch.device,
+) -> np.ndarray:
+    """Estimate metric depth with preloaded processor/model."""
+    image = Image.open(img_path).convert("RGB")
+    orig_w, orig_h = image.size
 
     inputs = processor(images=image, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -57,8 +58,25 @@ def estimate_depth(
     ).squeeze()
 
     depth_np = depth.cpu().numpy().astype(np.float32)
+    del inputs, outputs, predicted_depth, depth
+    return depth_np
 
-    del model, inputs, outputs, predicted_depth, depth
+
+def estimate_depth(
+    img_path: str | Path,
+    cfg: DepthConfig | None = None,
+) -> np.ndarray:
+    """Estimate metric depth for a single image.
+
+    Loads model to GPU, infers, moves to CPU, clears VRAM.
+
+    Returns:
+        depth_map: np.ndarray of shape (H, W) with metric depth in meters.
+    """
+    processor, model, device = load_depth_components(cfg)
+    depth_np = estimate_depth_with_components(img_path, processor, model, device)
+
+    del model, processor
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

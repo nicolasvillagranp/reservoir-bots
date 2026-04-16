@@ -9,11 +9,16 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Mode: "test" (laptop, small subset) or "production" (DGX, full dataset)
 # ---------------------------------------------------------------------------
 MODE = os.environ.get("PIPELINE_MODE", "test")
+
+print(f"Running in {MODE} mode. Set PIPELINE_MODE=production for full training.")
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -103,8 +108,9 @@ class YOLOConfig:
     """YOLO training hyperparameters. Adapts to MODE automatically."""
 
     model_weights: str = str(PRETRAINED_DIR / "yolo11n.pt")
+    finetuned_weights: str = str(FINETUNED_DIR / "yolo/weights/best.pt")
     imgsz: int = 640
-    batch: int = 4
+    batch: int = 128
     epochs: int = 2 if MODE == "test" else 50
     device: str = "cuda"
     subset_size: int | None = 50 if MODE == "test" else None
@@ -144,6 +150,9 @@ class SymbolicConfig:
     nearness_threshold: float = 1.5
     horizontal_bins: tuple[str, ...] = ("LEFT", "CENTER", "RIGHT")
     claude_model: str = "claude-sonnet-4-6"
+    dataset_fraction: float = 0.05 if MODE == "production" else 1.0
+    depth_strategy: str = "bbox_approx" if MODE == "production" else "model"
+    enable_stage_checkpoints: bool = True
 
 
 # ---------------------------------------------------------------------------

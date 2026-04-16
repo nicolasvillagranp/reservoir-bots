@@ -1,0 +1,17 @@
+services:
+  theker-lab:
+    shm_size: '32gb'
+    build: .
+    container_name: theker-lab-container
+    volumes:
+      - .:/app  # Mounts current folder to /app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all # Or set to 1
+              capabilities: [gpu]
+    # Keep container running and enable interactive TTY
+    stdin_open: true 
+    tty: true

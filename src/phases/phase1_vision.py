@@ -58,6 +58,24 @@ def predict_objects(
     Drops any bbox occupying < min_area_frac of the image area.
     """
     model = YOLO(str(model_path))
+    return predict_objects_with_model(
+        img_path,
+        model,
+        conf_thresh=conf_thresh,
+        min_area_frac=min_area_frac,
+    )
+
+
+def predict_objects_with_model(
+    img_path: str | Path,
+    model: YOLO,
+    conf_thresh: float = 0.25,
+    min_area_frac: float = 0.01,
+) -> list[dict]:
+    """Run inference and return filtered detections.
+
+    Drops any bbox occupying < min_area_frac of the image area.
+    """
     results = model.predict(source=str(img_path), conf=conf_thresh, verbose=False)
 
     detections: list[dict] = []

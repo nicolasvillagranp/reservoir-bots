@@ -203,8 +203,15 @@ def load_split(split: str) -> list[Data]:
 # Evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate(model: NavigationGNN, loader: DataLoader) -> dict[str, float]:
+def evaluate(
+    model: NavigationGNN,
+    loader: DataLoader,
+    device: torch.device | None = None,
+) -> dict[str, float]:
     """Evaluate model on a DataLoader. Returns accuracy metrics."""
+    if device is None:
+        device = next(model.parameters()).device
+
     model.eval()
     correct = 0
     total = 0
@@ -213,6 +220,7 @@ def evaluate(model: NavigationGNN, loader: DataLoader) -> dict[str, float]:
 
     with torch.no_grad():
         for batch in loader:
+            batch = batch.to(device)
             action_logits, _ = model(batch)
             preds = action_logits.argmax(dim=1)
             targets = batch.y
@@ -242,23 +250,40 @@ def train_gnn(cfg: GNNConfig | None = None) -> Path:
     """Train GNN on train split, evaluate on val split."""
     cfg = cfg or GNNConfig()
     GNN_DIR.mkdir(parents=True, exist_ok=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_graphs = load_split("train")
     val_graphs = load_split("val")
     if not train_graphs:
         raise ValueError("No training graphs — run Phase 4 first")
 
-    train_loader = DataLoader(train_graphs, batch_size=cfg.batch_size, shuffle=True)
-    val_loader = DataLoader(val_graphs, batch_size=cfg.batch_size) if val_graphs else None
+    use_pin_memory = device.type == "cuda"
+    train_loader = DataLoader(
+        train_graphs,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        pin_memory=use_pin_memory,
+    )
+    val_loader = (
+        DataLoader(val_graphs, batch_size=cfg.batch_size, pin_memory=use_pin_memory)
+        if val_graphs
+        else None
+    )
 
-    model = NavigationGNN(hidden=cfg.hidden)
+    model = NavigationGNN(hidden=cfg.hidden).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
 
-    log_every = max(1, cfg.epochs // 10)
+    if device.type == "cuda":
+        print(f"  Training on GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        print("  Training on CPU")
+
+    log_every = 1
     for epoch in range(cfg.epochs):
         model.train()
         epoch_loss = 0.0
         for batch in train_loader:
+            batch = batch.to(device)
             metrics = train_step(model, batch, optimizer)
             epoch_loss += metrics["total_loss"]
 
@@ -266,13 +291,13 @@ def train_gnn(cfg: GNNConfig | None = None) -> Path:
             avg_loss = epoch_loss / len(train_loader)
             line = f"  Epoch {epoch+1:4d}/{cfg.epochs} | train_loss={avg_loss:.4f}"
             if val_loader:
-                val_metrics = evaluate(model, val_loader)
+                val_metrics = evaluate(model, val_loader, device)
                 line += f" | val_acc={val_metrics['accuracy']:.1%}"
             print(line)
 
     # Final metrics
     print("\n  --- Final metrics ---")
-    train_metrics = evaluate(model, train_loader)
+    train_metrics = evaluate(model, train_loader, device)
     print(f"  Train: acc={train_metrics['accuracy']:.1%} "
           f"(n={train_metrics['total']}) "
           f"STOP={train_metrics['STOP']:.0%} "
@@ -280,7 +305,7 @@ def train_gnn(cfg: GNNConfig | None = None) -> Path:
           f"CONTINUE={train_metrics['CONTINUE']:.0%}")
 
     if val_loader:
-        val_metrics = evaluate(model, val_loader)
+        val_metrics = evaluate(model, val_loader, device)
         print(f"  Val:   acc={val_metrics['accuracy']:.1%} "
               f"(n={val_metrics['total']}) "
               f"STOP={val_metrics['STOP']:.0%} "
