@@ -1,6 +1,9 @@
 data/
-outputs/
-models/
+models/*
+!models/finetuned/
+!models/gnn/
+outputs/*
+!outputs/submission.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
