@@ -4,6 +4,7 @@ models/*
 !models/gnn/
 outputs/*
 !outputs/submission.json
+!outputs/images/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
