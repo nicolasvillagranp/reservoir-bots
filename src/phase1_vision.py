@@ -10,13 +10,13 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
-from config import DATA_DIR, MACRO_CLASSES, YOLOConfig
+from config import DATA_DIR, FINETUNED_DIR, MACRO_CLASSES, YOLOConfig
 
 
 def train(
     cfg: YOLOConfig | None = None,
     data_yaml: Path | None = None,
-    project: str | Path = "runs/train",
+    project: str | Path = FINETUNED_DIR,
     name: str = "theker",
     exist_ok: bool = True,
     **overrides: object,
@@ -38,6 +38,7 @@ def train(
     data_yaml = data_yaml or (DATA_DIR / "dataset.yaml")
 
     model = YOLO(cfg.model_weights)
+    print(f"Starting training with config: {cfg}")
     model.train(
         data=str(data_yaml),
         epochs=cfg.epochs,
@@ -49,6 +50,7 @@ def train(
         exist_ok=exist_ok,
         **overrides,
     )
+    print("Training completed. Locating best.pt weights...")
     best_pt = Path(project) / name / "weights" / "best.pt"
     return best_pt
 
@@ -99,12 +101,14 @@ def predict_objects(
             # class_name depends on whether model is fine-tuned (0-3) or base COCO
             class_name = model.names.get(cls_id, str(cls_id))
 
-            detections.append({
-                "class_id": cls_id,
-                "class_name": class_name,
-                "confidence": conf,
-                "bbox_xyxy": [x1, y1, x2, y2],
-                "bbox_xywh": [x1, y1, x2 - x1, y2 - y1],
-            })
+            detections.append(
+                {
+                    "class_id": cls_id,
+                    "class_name": class_name,
+                    "confidence": conf,
+                    "bbox_xyxy": [x1, y1, x2, y2],
+                    "bbox_xywh": [x1, y1, x2 - x1, y2 - y1],
+                }
+            )
 
     return detections

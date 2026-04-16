@@ -1,9 +1,19 @@
-"""Global configuration: macro-classes, category mappings, paths, and thresholds."""
+"""Global configuration: macro-classes, category mappings, paths, and thresholds.
+
+Set PIPELINE_MODE=production for full DGX training.
+Default is 'test' (small subset, few epochs).
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 from dataclasses import dataclass
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Mode: "test" (laptop, small subset) or "production" (DGX, full dataset)
+# ---------------------------------------------------------------------------
+MODE = os.environ.get("PIPELINE_MODE", "test")
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -13,6 +23,10 @@ DATA_DIR = PROJECT_ROOT / "data"
 IMAGE_DIR = DATA_DIR / "images"
 LABEL_DIR = DATA_DIR / "labels"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
+MODELS_DIR = PROJECT_ROOT / "models"
+PRETRAINED_DIR = MODELS_DIR / "pretrained"
+FINETUNED_DIR = MODELS_DIR / "finetuned"
+GNN_DIR = MODELS_DIR / "gnn"
 
 # ---------------------------------------------------------------------------
 # Macro-Class Ontology (4 classes)
@@ -36,32 +50,32 @@ MACRO_CLASS_TO_ID: dict[str, int] = {v: k for k, v in MACRO_CLASSES.items()}
 # ---------------------------------------------------------------------------
 RAW_TO_MACRO: dict[str, str] = {
     # ── HUMAN (0) ──────────────────────────────────────────────
-    "person":           "HUMAN",
-    "head":             "HUMAN",
-    "hat":              "HUMAN",
-    "helmet":           "HUMAN",
+    "person": "HUMAN",
+    "head": "HUMAN",
+    "hat": "HUMAN",
+    "helmet": "HUMAN",
     # ── VEHICLE (1) ───────────────────────────────────────────
-    "car":              "VEHICLE",
-    "truck":            "VEHICLE",
-    "bus":              "VEHICLE",
-    "train":            "VEHICLE",
-    "motorcycle":       "VEHICLE",
-    "bicycle":          "VEHICLE",
-    "forklift":         "VEHICLE",
-    "handcart":         "VEHICLE",
+    "car": "VEHICLE",
+    "truck": "VEHICLE",
+    "bus": "VEHICLE",
+    "train": "VEHICLE",
+    "motorcycle": "VEHICLE",
+    "bicycle": "VEHICLE",
+    "forklift": "VEHICLE",
+    "handcart": "VEHICLE",
     # ── OBSTACLE (2) ──────────────────────────────────────────
-    "box":              "OBSTACLE",
-    "crate":            "OBSTACLE",
-    "barrel":           "OBSTACLE",
-    "cone":             "CONTEXT",
-    "suitcase":         "OBSTACLE",
-    "chair":            "OBSTACLE",
-    "ladder":           "OBSTACLE",
-    "container":        "OBSTACLE",
+    "box": "OBSTACLE",
+    "crate": "OBSTACLE",
+    "barrel": "OBSTACLE",
+    "suitcase": "OBSTACLE",
+    "chair": "OBSTACLE",
+    "ladder": "OBSTACLE",
+    "container": "OBSTACLE",
     # ── CONTEXT (3) ───────────────────────────────────────────
-    "stop sign":        "CONTEXT",
-    "traffic sign":     "CONTEXT",
-    "traffic light":    "CONTEXT",
+    "cone": "CONTEXT",
+    "stop sign": "CONTEXT",
+    "traffic sign": "CONTEXT",
+    "traffic light": "CONTEXT",
 }
 
 
@@ -77,21 +91,22 @@ def raw_name_to_macro_id(raw_name: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
-# YOLO Training Defaults (VRAM-safe for 4 GB)
+# YOLO Training
 # ---------------------------------------------------------------------------
 @dataclass
 class YOLOConfig:
-    """YOLO training hyperparameters tuned for 4 GB VRAM."""
+    """YOLO training hyperparameters. Adapts to MODE automatically."""
 
-    model_weights: str = "yolo11n.pt"
+    model_weights: str = str(PRETRAINED_DIR / "yolo11n.pt")
     imgsz: int = 640
     batch: int = 4
-    epochs: int = 50
+    epochs: int = 2 if MODE == "test" else 50
     device: str = "cuda"
+    subset_size: int | None = 50 if MODE == "test" else None
 
 
 # ---------------------------------------------------------------------------
-# Depth Estimation Defaults
+# Depth Estimation
 # ---------------------------------------------------------------------------
 @dataclass
 class DepthConfig:
@@ -108,8 +123,8 @@ class DepthConfig:
 class FusionConfig:
     """Phase 3 fusion parameters."""
 
-    center_crop_fraction: float = 0.2  # central 20% of bbox for depth sampling
-    min_bbox_area_frac: float = 0.01   # drop boxes < 1% of image area
+    center_crop_fraction: float = 0.2
+    min_bbox_area_frac: float = 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -119,11 +134,25 @@ class FusionConfig:
 class SymbolicConfig:
     """Phase 4 graph-building thresholds."""
 
-    depth_close: float = 2.0   # meters
-    depth_far: float = 7.0     # meters
-    nearness_threshold: float = 1.5  # meter diff to count as "NEAR"
+    depth_close: float = 2.0
+    depth_far: float = 7.0
+    nearness_threshold: float = 1.5
     horizontal_bins: tuple[str, ...] = ("LEFT", "CENTER", "RIGHT")
-    claude_model: str = "claude-3-5-sonnet-20241022"
+    claude_model: str = "claude-sonnet-4-6"
+
+
+# ---------------------------------------------------------------------------
+# GNN Training
+# ---------------------------------------------------------------------------
+@dataclass
+class GNNConfig:
+    """Phase 5 GNN training hyperparameters."""
+
+    hidden: int = 64
+    lr: float = 0.01
+    batch_size: int = 32
+    epochs: int = 100 if MODE == "test" else 500
+    save_path: str = str(GNN_DIR / "navigation_gnn.pt")
 
 
 # ---------------------------------------------------------------------------

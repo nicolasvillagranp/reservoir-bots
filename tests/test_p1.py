@@ -27,10 +27,12 @@ sys.path.insert(0, str(SRC_DIR))
 
 from config import (
     DATA_DIR,
+    FINETUNED_DIR,
     IMAGE_DIR,
     LABEL_DIR,
     MACRO_CLASSES,
     OUTPUT_DIR,
+    PRETRAINED_DIR,
     YOLOConfig,
     raw_name_to_macro_id,
 )
@@ -41,10 +43,10 @@ PHASE1_OUT.mkdir(parents=True, exist_ok=True)
 
 # Colors per macro-class (BGR for OpenCV)
 CLASS_COLORS: dict[int, tuple[int, int, int]] = {
-    0: (0, 0, 255),    # HUMAN — red
+    0: (0, 0, 255),  # HUMAN — red
     1: (255, 165, 0),  # VEHICLE — orange
     2: (0, 255, 255),  # OBSTACLE — yellow
-    3: (0, 255, 0),    # CONTEXT — green
+    3: (0, 255, 0),  # CONTEXT — green
 }
 
 
@@ -130,9 +132,7 @@ def pick_val_images(per_class: int = 1) -> list[Path]:
     return picked[:5]
 
 
-def draw_detections(
-    img: np.ndarray, detections: list[dict], title: str
-) -> np.ndarray:
+def draw_detections(img: np.ndarray, detections: list[dict], title: str) -> np.ndarray:
     """Draw bounding boxes on image copy. Returns annotated image (RGB)."""
     vis = img.copy()
     for det in detections:
@@ -145,8 +145,7 @@ def draw_detections(
             color = (180, 180, 180)
         cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
         label = f"{det['class_name']} {det['confidence']:.2f}"
-        cv2.putText(vis, label, (x1, max(y1 - 5, 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        cv2.putText(vis, label, (x1, max(y1 - 5, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
     return vis
 
 
@@ -156,13 +155,15 @@ def test_training_smoke() -> Path:
     yaml_path = create_tiny_subset(50)
 
     cfg = YOLOConfig(epochs=2, batch=4)
-    project = OUTPUT_DIR / "phase1" / "runs"
+    project = FINETUNED_DIR
+    print(f"Starting 2-epoch training on tiny subset with config: {cfg}")
     best_pt = train(
         cfg=cfg,
         data_yaml=yaml_path,
         project=project,
         name="smoke_2ep",
     )
+    print(f"Training completed. Best weights at {best_pt}")
     # best.pt may not exist after only 2 epochs; last.pt is guaranteed
     last_pt = best_pt.parent / "last.pt"
     weights = best_pt if best_pt.exists() else last_pt
@@ -177,7 +178,7 @@ def test_inference_comparison(finetuned_pt: Path) -> None:
     val_images = pick_val_images()
     assert len(val_images) == 5, f"Expected 5 val images, got {len(val_images)}"
 
-    base_model = "yolo11n.pt"
+    base_model = str(PRETRAINED_DIR / "yolo11n.pt")
 
     fig, axes = plt.subplots(5, 2, figsize=(14, 30))
     fig.suptitle("Base COCO (left) vs Fine-tuned 4-class (right)", fontsize=14)
