@@ -83,9 +83,7 @@ R3F is not just a theoretical framework; it is engineered for high-speed edge de
 
 ## 🛡️ Beyond Accuracy: Fixing Dataset Bias
 
-During validation analysis, we discovered a significant flaw in the hackathon's human-annotated ground truth data. The original labels systematically missed people of color while accurately bounding white humans.
-
-Because our fine-tuned YOLO model leveraged robust pre-trained weights and generalized effectively across our `HUMAN` macro-class, **our pipeline actively corrected the dataset's racial bias.** 
+During validation analysis, we found that the dataset's automated annotations were highly inconsistent, particularly when bounding diverse groups of people. Because our fine-tuned YOLO model leveraged robust pre-trained weights to generalize across the HUMAN macro-class, **our pipeline was able to actively correct the poor automated labeling and generate highly accurate bounding boxes**.
 
 <!-- html subplot with models\finetuned\yolo\val_batch0_labels.jpg and models\finetuned\yolo\val_batch0_pred.jpg-->
 <div style="display: flex; gap: 20px;">
@@ -111,7 +109,7 @@ R3F operates in 6 sequential phases.
 2.  **Phase 1 (Dual Perception - Vision):** Fine-tunes YOLOv11 Nano for high-speed, lightweight 2D semantic detection.
 3.  **Phase 2 (Dual Perception - Depth):** Utilizes Depth Anything V2 to extract normalized (0.0 to 1.0) relative depth maps.
 4.  **Phase 3 (Spatial-Symbolic Compiler):** Fuses bounding boxes with center-cropped depth values to build a lightweight 3D scene dictionary.
-5.  **Phase 4 (Reliable Reasoning Tutor):** Offline knowledge generation. Claude 3.5 Sonnet evaluates the scene graphs using a `<thinking>` Chain-of-Thought protocol to generate optimal actions and "reasoning edges" based on warehouse safety rules.
+5.  **Phase 4 (Reliable Reasoning Tutor):** Offline knowledge generation. Claude Sonnet 4.6 evaluates the scene graphs using a `<thinking>` Chain-of-Thought protocol to generate optimal actions and "reasoning edges" based on warehouse safety rules.
 6.  **Phase 5 (Lightning Apprentice):** Trains a PyTorch Geometric GraphSAGE model on the LLM's outputs using a Joint-Loss formulation (Action Classification + Binary Edge Prediction).
 
 -----
@@ -127,7 +125,7 @@ R3F operates in 6 sequential phases.
 ### Setup
 
 ```bash
-git clone https://github.com/<your-org>/theker-hack.git
+git clone https://github.com/nicolasvillagranp/reservoir-bots.git
 cd theker-hack
 uv sync
 ```
