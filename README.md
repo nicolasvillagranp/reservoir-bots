@@ -86,17 +86,9 @@ R3F is not just a theoretical framework; it is engineered for high-speed edge de
 
 During validation analysis, we found that the dataset's automated annotations were highly inconsistent, particularly when bounding diverse groups of people. Because our fine-tuned YOLO model leveraged robust pre-trained weights to generalize across the HUMAN macro-class, **our pipeline was able to actively correct the poor automated labeling and generate highly accurate bounding boxes**.
 
-<!-- html subplot with models\finetuned\yolo\val_batch0_labels.jpg and models\finetuned\yolo\val_batch0_pred.jpg-->
-<div style="display: flex; gap: 20px;">
-  <div>
-    <h4>Ground Truth (Biased)</h4>
-    <img src="models/finetuned/yolo/val_batch0_labels.jpg" alt="Ground Truth" width="400">
-  </div>
-  <div>
-    <h4>R3F Predictions (Unbiased)</h4>
-    <img src="models/finetuned/yolo/val_batch0_pred.jpg" alt="R3F Predictions" width="400">
-  </div>
-</div>
+| Ground Truth (Biased) | R3F Predictions (Unbiased) |
+| :---: | :---: |
+| ![Alt 1](models/finetuned/yolo/val_batch0_labels.jpg) | ![Alt 2](models/finetuned/yolo/val_batch0_pred.jpg) |
 
 *Above: Ground truth annotations (Left) missing critical human detections compared to R3F's robust predictions (Right).*
 
